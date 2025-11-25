@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Motorola Fix Beeper — 复古打字机卡片生成</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --ink: #222;
+    --accent: #b84c3a;
+    --green: #2b5d4f;
+    --panel: #f1ede6;
+    --paper: #fffef8;
+    --shadow: rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 800px at 20% 10%, #fdfaf4 0%, var(--bg) 50%, #efe9dd 100%);
+    color: var(--ink);
+    font: 14px/1.6 system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* App layout */
+  .app {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "header header"
+      "typewriter canvas";
+    gap: 18px;
+    padding: 22px;
+    height: 100%;
+  }
+
+  header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+    border: 1px solid #e0d9cd;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 2px 8px var(--shadow);
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .brand .title {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .brand .badge {
+    color: var(--paper);
+    background: var(--green);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    box-shadow: 0 2px 4px var(--shadow);
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .input {
+    display: flex;
+    gap: 10px;
+    flex: 1;
+    min-width: 280px;
+    align-items: center;
+  }
+  textarea {
+    flex: 1;
+    resize: vertical;
+    min-height: 70px;
+    max-height: 160px;
+    border: 1px solid #d9d2c6;
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+    background: #fff;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+  }
+  textarea:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(43,93,79,0.12);
+  }
+  .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .btn {
+    appearance: none;
+    border: none;
+    background: var(--green);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px var(--shadow);
+    transition: transform 0.05s ease, box-shadow 0.2s ease, background 0.2s ease;
+    font-weight: 600;
+  }
+  .btn.secondary { background: #5f6d7a; }
+  .btn:active { transform: translateY(1px); }
+  .btn:hover { box-shadow: 0 3px 10px var(--shadow); background: #2f6c5c; }
+
+  .speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  input[type="range"] { width: 160px; }
+
+  /* Typewriter section */
+  .typewriter-area {
+    grid-area: typewriter;
+    display: grid;
+    place-items: center;
+    position: relative;
+    min-height: 420px;
+    background: var(--panel);
+    border: 1px solid #e0d9cd;
+    border-radius: 14px;
+    box-shadow: 0 3px 10px var(--shadow);
+    overflow: hidden;
+  }
+
+  /* Stylized retro typewriter (no images) */
+  .typewriter {
+    width: min(640px, 90%);
+    aspect-ratio: 5 / 3;
+    position: relative;
+    background: linear-gradient(#3a3f44, #30363b);
+    border-radius: 22px 22px 16px 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25), inset 0 -8px 14px rgba(0,0,0,0.35);
+    border: 1px solid #262a2e;
+    padding-top: 56px;
+  }
+
+  /* Nameplate */
+  .nameplate {
+    position: absolute;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(#cfc7bb, #bdb4a6);
+    color: #222;
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.4px;
+    border: 1px solid #a79e90;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.5);
+  }
+
+  /* Paper slot and paper preview */
+  .paper-slot {
+    position: absolute;
+    top: 54px; left: 50%;
+    transform: translateX(-50%);
+    width: 84%;
+    height: 10px;
+    background: #1f2327;
+    border-radius: 4px;
+    box-shadow: inset 0 2px 6px rgba(255,255,255,0.08);
+  }
+  .paper-preview {
+    position: absolute;
+    top: 68px; left: 50%;
+    transform: translateX(-50%);
+    width: 78%;
+    height: 54%;
+    background: var(--paper);
+    border: 1px solid #dfd8c9;
+    box-shadow: 0 12px 20px rgba(0,0,0,0.18);
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow: hidden;
+  }
+  .paper-typed {
+    font-family: "Courier New", Courier, monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #222;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Keybed & keys */
+  .keybed {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 86%;
+    height: 34%;
+    background: linear-gradient(#2b3035, #1f2327);
+    border-radius: 16px;
+    border: 1px solid #22272b;
+    box-shadow: inset 0 10px 14px rgba(0,0,0,0.35);
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-auto-rows: 38px;
+    gap: 8px;
+    padding: 14px;
+  }
+  .key {
+    background: #dcd7cf;
+    border: 1px solid #bdb4a6;
+    border-radius: 10px;
+    box-shadow: 0 3px 0 #a89e90, 0 6px 10px rgba(0,0,0,0.2);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    user-select: none;
+    font-size: 12px;
+    color: #2b2b2b;
+  }
+  .key:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #a89e90, 0 3px 6px rgba(0,0,0,0.18);
+  }
+  .space {
+    grid-column: span 6;
+  }
+
+  /* Canvas (drop area) */
+  .canvas {
+    grid-area: canvas;
+    position: relative;
+    background: repeating-linear-gradient(
+      90deg,
+      #f7f3ea,
+      #f7f3ea 24px,
+      #f3efe6 24px,
+      #f3efe6 48px
+    );
+    border: 1px solid #e0d9cd;
+    border-radius: 14px;
+    box-shadow: inset 0 0 0 1px #e8e1d5, 0 3px 10px var(--shadow);
+    overflow: hidden;
+    min-height: 420px;
+  }
+  .canvas::after {
+    content: "空白区域（拖动卡片到这里）";
+    position: absolute;
+    top: 12px; right: 16px;
+    color: #716c61;
+    font-size: 12px;
+  }
+
+  /* Card styles */
+  .card {
+    position: absolute;
+    top: 24px; left: 24px;
+    width: 280px;
+    min-height: 160px;
+    background: var(--paper);
+    border: 1px solid #d8d2c6;
+    border-radius: 10px;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+    padding: 14px 16px;
+    cursor: grab;
+    user-select: none;
+  }
+  .card:active { cursor: grabbing; }
+  .card .titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px dashed #cfc7bb;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .card .titlebar .name {
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.2px;
+  }
+  .card .titlebar .tools {
+    display: flex;
+    gap: 6px;
+  }
+  .tool-btn {
+    appearance: none;
+    background: #ece7de;
+    border: 1px solid #d6cfc3;
+    color: #333;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .tool-btn:hover { background: #e6e0d6; }
+
+  .card-content {
+    font-family: "Courier New", Courier, monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #222;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Typewriter cursor */
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    background: transparent;
+    border-left: 2px solid #444;
+    margin-left: 2px;
+    animation: blink 0.9s step-end infinite;
+  }
+  @keyframes blink {
+    50% { border-color: transparent; }
+  }
+
+  /* Footer hint */
+  .hint {
+    position: absolute;
+    bottom: 10px; left: 14px;
+    color: #6f6a60;
+    font-size: 12px;
+  }
+
+  /* Responsive tweak */
+  @media (max-width: 900px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "header"
+        "typewriter"
+        "canvas";
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="brand">
+        <div class="title">Motorola Fix Beeper</div>
+        <div class="badge">复古打字机应用</div>
+      </div>
+      <div class="controls">
+        <div class="input">
+          <textarea id="textInput" placeholder="输入文本，然后点击“生成卡片”..."></textarea>
+          <div class="row">
+            <button class="btn" id="generateBtn">生成卡片</button>
+            <button class="btn secondary" id="clearBtn">清空卡片</button>
+          </div>
+        </div>
+        <div class="speed">
+          <label for="speedRange">动画速度</label>
+          <input type="range" id="speedRange" min="10" max="120" value="45" />
+        </div>
+      </div>
+    </header>
+
+    <section class="typewriter-area">
+      <div class="typewriter" aria-label="复古打字机">
+        <div class="nameplate">MOTOROLA • FIX • BEEPER</div>
+        <div class="paper-slot"></div>
+        <div class="paper-preview">
+          <div id="paperTyped" class="paper-typed"></div>
+        </div>
+        <div class="keybed" aria-hidden="true">
+          <!-- Keys (decorative) -->
+          <div class="key">Q</div><div class="key">W</div><div class="key">E</div><div class="key">R</div><div class="key">T</div><div class="key">Y</div>
+          <div class="key">U</div><div class="key">I</div><div class="key">O</div><div class="key">P</div><div class="key">[</div><div class="key">]</div>
+          <div class="key">A</div><div class="key">S</div><div class="key">D</div><div class="key">F</div><div class="key">G</div><div class="key">H</div>
+          <div class="key">J</div><div class="key">K</div><div class="key">L</div><div class="key">;</div><div class="key">'</div><div class="key">\</div>
+          <div class="key">Z</div><div class="key">X</div><div class="key">C</div><div class="key">V</div><div class="key">B</div><div class="key">N</div>
+          <div class="key">M</div><div class="key">,</div><div class="key">.</div><div class="key">/</div><div class="key space">Space</div>
+          <div class="key">⇧</div><div class="key">⌫</div>
+        </div>
+        <div class="hint">提示：生成的卡片会以打字机动画打印，并可拖到右侧空白区域。</div>
+      </div>
+    </section>
+
+    <section class="canvas" id="canvas" aria-label="空白区域（拖拽卡片到此处）">
+      <!-- Generated cards will appear here -->
+    </section>
+  </div>
+
+<script>
+(function() {
+  const inputEl = document.getElementById('textInput');
+  const genBtn = document.getElementById('generateBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const speedEl = document.getElementById('speedRange');
+  const paperTypedEl = document.getElementById('paperTyped');
+  const canvasEl = document.getElementById('canvas');
+
+  let typingTimer = null;
+
+  // Typewriter effect in the preview paper
+  function typeOnPaper(text, msPerChar) {
+    if (typingTimer) {
+      clearInterval(typingTimer);
+      typingTimer = null;
+    }
+    paperTypedEl.textContent = '';
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    paperTypedEl.appendChild(cursor);
+
+    let i = 0;
+    typingTimer = setInterval(() => {
+      if (i >= text.length) {
+        clearInterval(typingTimer);
+        typingTimer = null;
+        // remove cursor after done
+        cursor.remove();
+        return;
+      }
+      const ch = text[i++];
+      cursor.insertAdjacentText('beforebegin', ch);
+      paperTypedEl.scrollTop = paperTypedEl.scrollHeight;
+    }, msPerChar);
+  }
+
+  // Card creation with typewriter-effect content
+  function createCard(text, msPerChar) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.top = Math.round(30 + Math.random() * 60) + 'px';
+    card.style.left = Math.round(30 + Math.random() * 60) + 'px';
+
+    const titlebar = document.createElement('div');
+    titlebar.className = 'titlebar';
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = 'Beeper 卡片';
+
+    const tools = document.createElement('div');
+    tools.className = 'tools';
+
+    const pinBtn = document.createElement('button');
+    pinBtn.className = 'tool-btn';
+    pinBtn.textContent = '固定/解锁';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'tool-btn';
+    closeBtn.textContent = '删除';
+
+    tools.appendChild(pinBtn);
+    tools.appendChild(closeBtn);
+    titlebar.appendChild(name);
+    titlebar.appendChild(tools);
+
+    const content = document.createElement('div');
+    content.className = 'card-content';
+
+    const cursor = document.createElement('span');
+    cursor.className = 'cursor';
+    content.appendChild(cursor);
+
+    card.appendChild(titlebar);
+    card.appendChild(content);
+    canvasEl.appendChild(card);
+
+    // Typewriter text into card
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i >= text.length) {
+        clearInterval(timer);
+        cursor.remove();
+        return;
+      }
+      const ch = text[i++];
+      cursor.insertAdjacentText('beforebegin', ch);
+      card.scrollTop = card.scrollHeight;
+    }, msPerChar);
+
+    // Drag handling
+    let drag = { active: false, offsetX: 0, offsetY: 0, pinned: false };
+
+    function onPointerDown(e) {
+      if (drag.pinned) return;
+      drag.active = true;
+      card.style.cursor = 'grabbing';
+      const rect = card.getBoundingClientRect();
+      const canvasRect = canvasEl.getBoundingClientRect();
+      drag.offsetX = e.clientX - rect.left;
+      drag.offsetY = e.clientY - rect.top;
+
+      // keep within canvas bounds visually while dragging
+      document.addEventListener('pointermove', onPointerMove);
+      document.addEventListener('pointerup', onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!drag.active) return;
+      const canvasRect = canvasEl.getBoundingClientRect();
+      let x = e.clientX - canvasRect.left - drag.offsetX;
+      let y = e.clientY - canvasRect.top - drag.offsetY;
+
+      // constrain within canvas
+      const maxX = canvasEl.clientWidth - card.clientWidth - 6;
+      const maxY = canvasEl.clientHeight - card.clientHeight - 6;
+      x = Math.max(6, Math.min(maxX, x));
+      y = Math.max(6, Math.min(maxY, y));
+
+      card.style.left = x + 'px';
+      card.style.top = y + 'px';
+    }
+
+    function onPointerUp() {
+      drag.active = false;
+      card.style.cursor = 'grab';
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    }
+
+    // Tools
+    pinBtn.addEventListener('click', () => {
+      drag.pinned = !drag.pinned;
+      card.style.borderColor = drag.pinned ? '#7aa37f' : '#d8d2c6';
+      card.style.boxShadow = drag.pinned
+        ? '0 10px 24px rgba(43,93,79,0.15)'
+        : '0 8px 18px rgba(0,0,0,0.12)';
+    });
+    closeBtn.addEventListener('click', () => {
+      card.remove();
+    });
+
+    // Bind drag to titlebar for nicer UX, but also card body
+    titlebar.addEventListener('pointerdown', onPointerDown);
+    card.addEventListener('pointerdown', (e) => {
+      // Allow select text inside content: start drag only if not selecting text
+      if (e.target.closest('.card-content')) return;
+      onPointerDown(e);
+    });
+  }
+
+  // Connect controls
+  genBtn.addEventListener('click', () => {
+    const text = inputEl.value.trim();
+    const ms = Math.max(10, Math.min(120, Number(speedEl.value)));
+    if (!text) {
+      // preview a subtle message
+      typeOnPaper('（请输入一些文本来生成卡片。）', ms);
+      return;
+    }
+    typeOnPaper(text, Math.round(ms * 0.75)); // preview slightly faster
+    createCard(text, ms);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    paperTypedEl.textContent = '';
+    canvasEl.querySelectorAll('.card').forEach(c => c.remove());
+  });
+
+  // Live preview typing when user types (optional subtle effect)
+  let previewDebounce;
+  inputEl.addEventListener('input', () => {
+    clearTimeout(previewDebounce);
+    const text = inputEl.value;
+    const ms = Math.max(10, Math.min(120, Number(speedEl.value)));
+    previewDebounce = setTimeout(() => {
+      // lightweight: show last 160 chars
+      typeOnPaper(text.slice(-160), Math.round(ms * 0.85));
+    }, 220);
+  });
+
+})();
+</script>
+</body>
+</html>
