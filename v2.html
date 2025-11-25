@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>月亮粒子圣诞树 - Musical Edition</title>
+    <!-- 引入 Google Fonts: Great Vibes (优雅手写体) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+            /* 默认字体回退 */
+            font-family: 'Arial', sans-serif; 
+            /* 禁止选中文字，提升体验 */
+            user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+
+        /* --- 原有文字样式 --- */
+        #overlay {
+            position: absolute;
+            top: 85%; 
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+            width: 100%;
+            opacity: 0; 
+            animation: textLoop 6s ease-in-out infinite;
+        }
+        
+        @keyframes textLoop {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -40%); 
+                text-shadow: none;
+                color: #333; 
+            }
+            40% {
+                opacity: 1;
+                transform: translate(-50%, -50%); 
+                color: #fff;
+                text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(135, 206, 235, 0.6), 0 0 30px rgba(135, 206, 235, 0.4);
+            }
+            60% {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+                color: #fff;
+                text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(135, 206, 235, 0.6), 0 0 30px rgba(135, 206, 235, 0.4);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -60%);
+                text-shadow: none;
+                color: #333;
+            }
+        }
+
+        h1 {
+            font-family: 'Great Vibes', cursive;
+            font-size: 6vw; 
+            margin: 0;
+            white-space: nowrap;
+            letter-spacing: 2px;
+            font-weight: 400; 
+        }
+        
+        @media (max-width: 768px) {
+            h1 { font-size: 3.5rem; }
+            #overlay { top: 85%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1>Merry Christmas to Peppa Xiao</h1>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let tree; 
+        let snow = [];
+
+        // 配置参数
+        const CONFIG = {
+            particleCount: 2000, 
+            treeWidth: 300,      
+            treeHeight: 500,     
+            rotateSpeed: 0.008,  
+            perspective: 500
+        };
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            
+            if (width < 600) {
+                CONFIG.treeWidth = width * 0.5;
+                CONFIG.treeHeight = height * 0.6;
+                CONFIG.particleCount = 1200; 
+            } else {
+                CONFIG.treeWidth = Math.min(400, width * 0.3);
+                CONFIG.treeHeight = Math.min(600, height * 0.7);
+                CONFIG.particleCount = 2000;
+            }
+            
+            initScene();
+        }
+        window.addEventListener('resize', resize);
+
+        class Particle {
+            constructor(treeX, treeY, colorPalette) {
+                this.treeX = treeX; 
+                this.treeY = treeY; 
+                this.colorPalette = colorPalette;
+                this.reset();
+            }
+
+            reset() {
+                this.y = Math.random() * CONFIG.treeHeight; 
+                let radius = (CONFIG.treeWidth / 2) * (1 - this.y / CONFIG.treeHeight);
+                radius += (Math.random() - 0.5) * 15; 
+                
+                let angle = Math.random() * Math.PI * 2;
+                
+                this.x = Math.cos(angle) * radius;
+                this.z = Math.sin(angle) * radius;
+                
+                this.size = Math.random() * 2.5 + 0.5; 
+                this.color = this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
+                this.alpha = Math.random() * 0.5 + 0.5;
+                this.sparkleSpeed = Math.random() * 0.05 + 0.01;
+                this.phase = Math.random() * Math.PI * 2;
+            }
+
+            update(angleOffset) {
+                this.phase += this.sparkleSpeed;
+                this.currentAlpha = this.alpha * (0.6 + 0.4 * Math.sin(this.phase));
+
+                let cos = Math.cos(angleOffset);
+                let sin = Math.sin(angleOffset);
+                
+                let rx = this.x * cos - this.z * sin;
+                let rz = this.x * sin + this.z * cos;
+
+                let scale = CONFIG.perspective / (CONFIG.perspective + rz + 400); 
+                
+                this.projX = this.treeX + rx * scale;
+                this.projY = (this.treeY - this.y) * scale + (height * 0.15); 
+                this.projSize = this.size * scale;
+                this.projScale = scale; 
+            }
+
+            draw() {
+                ctx.globalAlpha = this.currentAlpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.projX, this.projY, this.projSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.globalAlpha = this.currentAlpha * 0.15;
+                let baseGroundY = this.treeY + (height * 0.15); 
+                let distFromBase = baseGroundY - this.projY;
+                let reflectY = baseGroundY + distFromBase * 0.8; 
+                
+                ctx.beginPath();
+                ctx.arc(this.projX, reflectY, this.projSize * 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class MoonTopper {
+            constructor(x, y, size, color) {
+                this.x = x;
+                this.y = y;
+                this.baseY = y; 
+                this.size = size;
+                this.color = color;
+                this.floatOffset = 0;
+            }
+
+            draw(angle) {
+                this.floatOffset += 0.03;
+                let currentY = this.y + Math.sin(this.floatOffset) * 3;
+
+                ctx.save();
+                ctx.translate(this.x, currentY);
+                
+                let scaleX = Math.cos(angle);
+                ctx.scale(scaleX, 1);
+                
+                ctx.shadowBlur = 40; 
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = 1; 
+
+                // 绘制月亮形状
+                ctx.beginPath();
+                ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(this.size * 0.4, 0, this.size * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.globalCompositeOperation = 'source-over';
+                
+                // 仅为了发光，不描边以保持柔和
+                ctx.shadowBlur = 15;
+                ctx.strokeStyle = '#FFFFFF';
+                // ctx.lineWidth = 3; 
+                // ctx.stroke(); 
+
+                ctx.restore();
+            }
+        }
+
+        class Tree {
+            constructor(x) {
+                this.x = x;
+                this.particles = [];
+                const palette = ['#E1F5FE', '#B3E5FC', '#81D4FA', '#4FC3F7', '#FFFFFF', '#E0F2F1', '#FFF9C4'];
+                
+                for (let i = 0; i < CONFIG.particleCount; i++) {
+                    this.particles.push(new Particle(x, height * 0.7, palette));
+                }
+                this.angle = 0;
+                
+                this.topper = new MoonTopper(x, 0, 35, '#E0F7FA');
+            }
+
+            updateAndDraw() {
+                this.angle += CONFIG.rotateSpeed;
+                
+                let scaleAtCenter = CONFIG.perspective / (CONFIG.perspective + 400); 
+                let treeBaseY = height * 0.7; 
+                let treeTipWorldY = CONFIG.treeHeight;
+                let screenTipY = (treeBaseY - treeTipWorldY) * scaleAtCenter + (height * 0.15);
+                
+                this.topper.x = this.x;
+                this.topper.y = screenTipY - 20; 
+                
+                this.particles.forEach(p => p.update(this.angle));
+                this.particles.sort((a, b) => a.projScale - b.projScale);
+                this.particles.forEach(p => p.draw());
+                
+                this.topper.draw(this.angle);
+            }
+        }
+
+        class Snow {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * -height;
+                this.speed = Math.random() * 1.5 + 0.5;
+                this.size = Math.random() * 2;
+                this.opacity = Math.random() * 0.5 + 0.1;
+            }
+            draw() {
+                this.y += this.speed;
+                if (this.y > height) this.reset();
+                ctx.fillStyle = `rgba(255,255,255,${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initScene() {
+            tree = new Tree(width / 2);
+            snow = [];
+            for(let i=0; i<150; i++) snow.push(new Snow());
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            let grad = ctx.createLinearGradient(0, height * 0.65, 0, height);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(0.4, 'rgba(20, 40, 70, 0.2)'); 
+            grad.addColorStop(1, 'rgba(10, 20, 40, 0.5)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, height * 0.65, width, height * 0.35);
+
+            snow.forEach(s => s.draw());
+            
+            if (tree) tree.updateAndDraw();
+
+            requestAnimationFrame(animate);
+        }
+
+        resize();
+        animate();
+    </script>
+</body>
+</html>
+
