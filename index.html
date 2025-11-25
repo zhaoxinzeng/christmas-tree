@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双色粒子圣诞树 - Snowy Edition</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+            font-family: 'Brush Script MT', cursive; 
+        }
+        canvas {
+            display: block;
+        }
+        #overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            text-align: center;
+            pointer-events: none;
+            mix-blend-mode: overlay;
+            z-index: 10;
+            opacity: 0; /* 初始隐藏 */
+            animation: fadeIn 6s ease-out forwards; /* 6秒缓慢浮现并保持 */
+        }
+        
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translate(-50%, -40%); }
+            100% { opacity: 1; transform: translate(-50%, -50%); }
+        }
+
+        h1 {
+            font-size: 6vw;
+            margin: 0;
+            text-shadow: 0 0 10px rgba(255,255,255,0.9), 0 0 30px rgba(255,255,255,0.6);
+            white-space: nowrap;
+            letter-spacing: 2px;
+        }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            h1 { font-size: 3.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1>Merry Christmas</h1>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let trees = [];
+        let snow = [];
+
+        // 配置参数 - 调整了树的大小
+        const CONFIG = {
+            particleCount: 1500, // 增加粒子数
+            treeWidth: 220,      // 加宽树底
+            treeHeight: 450,     // 加高树身
+            rotateSpeed: 0.008,  // 旋转速度
+            perspective: 500     
+        };
+
+        // 调整画布大小
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            
+            // 响应式调整
+            if (width < 600) {
+                CONFIG.treeWidth = 140;
+                CONFIG.treeHeight = 300;
+                CONFIG.particleCount = 900;
+            }
+            
+            initScene();
+        }
+        window.addEventListener('resize', resize);
+
+        // 3D 粒子类
+        class Particle {
+            constructor(treeX, treeY, colorPalette) {
+                this.treeX = treeX; 
+                this.treeY = treeY; 
+                this.colorPalette = colorPalette;
+                this.reset();
+            }
+
+            reset() {
+                this.y = Math.random() * CONFIG.treeHeight; 
+                // 锥体形状
+                let radius = (CONFIG.treeWidth / 2) * (1 - this.y / CONFIG.treeHeight);
+                radius += (Math.random() - 0.5) * 15; // 随机松散度
+                
+                let angle = Math.random() * Math.PI * 2;
+                
+                this.x = Math.cos(angle) * radius;
+                this.z = Math.sin(angle) * radius;
+                
+                this.size = Math.random() * 2 + 0.5;
+                this.color = this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
+                this.alpha = Math.random() * 0.5 + 0.5;
+                this.sparkleSpeed = Math.random() * 0.05 + 0.01;
+                this.phase = Math.random() * Math.PI * 2;
+            }
+
+            update(angleOffset) {
+                // 闪烁
+                this.phase += this.sparkleSpeed;
+                this.currentAlpha = this.alpha * (0.6 + 0.4 * Math.sin(this.phase));
+
+                // 旋转
+                let cos = Math.cos(angleOffset);
+                let sin = Math.sin(angleOffset);
+                
+                let rx = this.x * cos - this.z * sin;
+                let rz = this.x * sin + this.z * cos;
+
+                // 投影
+                let scale = CONFIG.perspective / (CONFIG.perspective + rz + 400); 
+                
+                this.projX = this.treeX + rx * scale;
+                this.projY = (this.treeY - this.y) * scale + (height * 0.1); 
+                this.projSize = this.size * scale;
+                this.projScale = scale; 
+            }
+
+            draw() {
+                ctx.globalAlpha = this.currentAlpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.projX, this.projY, this.projSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 地面树影 (稍微加强一点)
+                ctx.globalAlpha = this.currentAlpha * 0.2;
+                let reflectY = this.treeY + (this.treeY - this.projY) * 0.6 + 20; 
+                ctx.beginPath();
+                ctx.arc(this.projX, reflectY, this.projSize * 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // 装饰物类
+        class Topper {
+            constructor(type, x, y, size, color) {
+                this.type = type; // 'moon' or 'heart'
+                this.x = x;
+                this.y = y;
+                this.size = size;
+                this.color = color;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.shadowBlur = 25;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+
+                if (this.type === 'moon') {
+                    // 月亮
+                    ctx.beginPath();
+                    ctx.arc(-6, 0, this.size, 0, Math.PI * 2); 
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.arc(4, -4, this.size * 0.9, 0, Math.PI * 2); 
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.fill();
+                    // 勾勒轮廓增强亮度
+                    ctx.shadowBlur = 10;
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else if (this.type === 'heart') {
+                    // 爱心
+                    let s = this.size / 30; 
+                    ctx.beginPath();
+                    ctx.moveTo(0, -10 * s);
+                    ctx.bezierCurveTo(0, -13 * s, -5 * s, -25 * s, -25 * s, -25 * s);
+                    ctx.bezierCurveTo(-55 * s, -25 * s, -55 * s, 10 * s, -55 * s, 10 * s);
+                    ctx.bezierCurveTo(-55 * s, 30 * s, 0, 60 * s, 0, 60 * s);
+                    ctx.bezierCurveTo(0, 60 * s, 55 * s, 30 * s, 55 * s, 10 * s);
+                    ctx.bezierCurveTo(55 * s, 10 * s, 55 * s, -25 * s, 25 * s, -25 * s);
+                    ctx.bezierCurveTo(5 * s, -25 * s, 0, -13 * s, 0, -10 * s);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        class Tree {
+            constructor(x, colorPalette, type) {
+                this.x = x;
+                this.particles = [];
+                for (let i = 0; i < CONFIG.particleCount; i++) {
+                    this.particles.push(new Particle(x, height * 0.8, colorPalette));
+                }
+                this.angle = 0;
+                
+                let topperColor = type === 'blue' ? '#E0F7FA' : '#F8BBD0';
+                // 计算顶部位置
+                let topY = (height * 0.8) - CONFIG.treeHeight - 30;
+                
+                this.topper = new Topper(
+                    type === 'blue' ? 'moon' : 'heart',
+                    x, 
+                    topY, 
+                    28, 
+                    topperColor
+                );
+            }
+
+            updateAndDraw() {
+                this.angle += CONFIG.rotateSpeed;
+                this.particles.forEach(p => p.update(this.angle));
+                this.particles.sort((a, b) => a.projScale - b.projScale);
+                this.particles.forEach(p => p.draw());
+                this.topper.draw();
+            }
+        }
+
+        // 背景雪花
+        class Snow {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * -height;
+                this.speed = Math.random() * 2 + 0.5;
+                this.size = Math.random() * 2.5; // 稍微大一点
+                this.opacity = Math.random() * 0.5 + 0.3;
+            }
+            draw() {
+                this.y += this.speed;
+                if (this.y > height) this.reset();
+                ctx.fillStyle = `rgba(255,255,255,${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initScene() {
+            trees = [];
+            const bluePalette = ['#E1F5FE', '#B3E5FC', '#81D4FA', '#4FC3F7', '#FFFFFF', '#E0F2F1'];
+            const pinkPalette = ['#FCE4EC', '#F8BBD0', '#F48FB1', '#F06292', '#FFFFFF', '#FFF8E1'];
+
+            let leftX = width * 0.25;
+            let rightX = width * 0.75;
+            
+            // 确保两棵树不会重叠
+            if(width < 800) {
+                 leftX = width * 0.2;
+                 rightX = width * 0.8;
+            }
+
+            trees.push(new Tree(leftX, bluePalette, 'blue'));
+            trees.push(new Tree(rightX, pinkPalette, 'pink'));
+
+            snow = [];
+            for(let i=0; i<200; i++) snow.push(new Snow()); // 增加雪花数量
+        }
+
+        function drawGround() {
+            // 地面雪景层
+            let grad = ctx.createLinearGradient(0, height * 0.7, 0, height);
+            // 上部透明
+            grad.addColorStop(0, 'rgba(0,0,0,0)'); 
+            // 中部开始变白，营造积雪感
+            grad.addColorStop(0.5, 'rgba(200, 220, 255, 0.05)'); 
+            grad.addColorStop(0.8, 'rgba(220, 240, 255, 0.15)');
+            // 底部更亮一点
+            grad.addColorStop(1, 'rgba(240, 250, 255, 0.25)');
+            
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, height * 0.7, width, height * 0.3);
+            
+            // 额外的地面光斑，增加层次
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            let groundCenter = ctx.createRadialGradient(width/2, height, height*0.1, width/2, height, height*0.5);
+            groundCenter.addColorStop(0, 'rgba(255,255,255,0.1)');
+            groundCenter.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = groundCenter;
+            ctx.fillRect(0, height/2, width, height/2);
+            ctx.restore();
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            drawGround();
+
+            // 绘制雪花
+            snow.forEach(s => s.draw());
+
+            // 绘制树
+            trees.forEach(t => t.updateAndDraw());
+
+            requestAnimationFrame(animate);
+        }
+
+        // 启动
+        resize();
+        animate();
+
+    </script>
+</body>
+</html>
