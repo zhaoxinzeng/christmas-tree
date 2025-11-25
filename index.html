@@ -3,55 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>双色粒子圣诞树 - Snowy Edition</title>
+    <title>月亮粒子圣诞树 - Single Moon Tree</title>
+    <!-- 引入 Google Fonts: Great Vibes (优雅手写体) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+    
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #050505;
             background: radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
-            font-family: 'Brush Script MT', cursive; 
+            /* 默认字体回退 */
+            font-family: 'Arial', sans-serif; 
         }
         canvas {
             display: block;
         }
         #overlay {
             position: absolute;
-            top: 50%;
+            top: 85%; 
             left: 50%;
             transform: translate(-50%, -50%);
             color: #fff;
             text-align: center;
             pointer-events: none;
-            mix-blend-mode: overlay;
             z-index: 10;
-            opacity: 0; /* 初始隐藏 */
-            animation: fadeIn 6s ease-out forwards; /* 6秒缓慢浮现并保持 */
+            width: 100%;
+            
+            /* 修改动画：6秒一个循环，无限播放 */
+            opacity: 0; 
+            animation: textLoop 6s ease-in-out infinite;
         }
         
-        @keyframes fadeIn {
-            0% { opacity: 0; transform: translate(-50%, -40%); }
-            100% { opacity: 1; transform: translate(-50%, -50%); }
+        @keyframes textLoop {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -40%); /* 从稍微偏下的位置开始 */
+                text-shadow: none;
+                color: #333; /* 初始颜色很暗 */
+            }
+            40% {
+                /* 约 2.4秒 变亮过程 */
+                opacity: 1;
+                transform: translate(-50%, -50%); /* 浮动到中间 */
+                color: #fff;
+                text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(135, 206, 235, 0.6), 0 0 30px rgba(135, 206, 235, 0.4);
+            }
+            60% {
+                /* 40%~60% 是保持阶段，约 1.2秒 长亮 */
+                opacity: 1;
+                transform: translate(-50%, -50%);
+                color: #fff;
+                text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(135, 206, 235, 0.6), 0 0 30px rgba(135, 206, 235, 0.4);
+            }
+            100% {
+                /* 慢慢变暗消失 */
+                opacity: 0;
+                transform: translate(-50%, -60%); /* 继续微向上浮动 */
+                text-shadow: none;
+                color: #333;
+            }
         }
 
         h1 {
-            font-size: 6vw;
+            /* 使用新字体 */
+            font-family: 'Great Vibes', cursive;
+            font-size: 6vw; /* 稍微调大一点，因为这款字体偏细 */
             margin: 0;
-            text-shadow: 0 0 10px rgba(255,255,255,0.9), 0 0 30px rgba(255,255,255,0.6);
             white-space: nowrap;
             letter-spacing: 2px;
+            font-weight: 400; /* 保持字体原有的优雅感，不要太粗 */
         }
         
         /* 移动端适配 */
         @media (max-width: 768px) {
             h1 { font-size: 3.5rem; }
+            #overlay { top: 85%; }
         }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h1>Merry Christmas</h1>
+        <h1>Merry Christmas to HQ</h1>
     </div>
     <canvas id="canvas"></canvas>
 
@@ -60,16 +96,16 @@
         const ctx = canvas.getContext('2d');
 
         let width, height;
-        let trees = [];
+        let tree; // 单棵树
         let snow = [];
 
-        // 配置参数 - 调整了树的大小
+        // 配置参数
         const CONFIG = {
-            particleCount: 1500, // 增加粒子数
-            treeWidth: 220,      // 加宽树底
-            treeHeight: 450,     // 加高树身
-            rotateSpeed: 0.008,  // 旋转速度
-            perspective: 500     
+            particleCount: 2000, 
+            treeWidth: 300,      
+            treeHeight: 500,     
+            rotateSpeed: 0.008,  
+            perspective: 500
         };
 
         // 调整画布大小
@@ -79,11 +115,14 @@
             canvas.width = width;
             canvas.height = height;
             
-            // 响应式调整
             if (width < 600) {
-                CONFIG.treeWidth = 140;
-                CONFIG.treeHeight = 300;
-                CONFIG.particleCount = 900;
+                CONFIG.treeWidth = width * 0.5;
+                CONFIG.treeHeight = height * 0.6;
+                CONFIG.particleCount = 1200; 
+            } else {
+                CONFIG.treeWidth = Math.min(400, width * 0.3);
+                CONFIG.treeHeight = Math.min(600, height * 0.7);
+                CONFIG.particleCount = 2000;
             }
             
             initScene();
@@ -101,16 +140,15 @@
 
             reset() {
                 this.y = Math.random() * CONFIG.treeHeight; 
-                // 锥体形状
                 let radius = (CONFIG.treeWidth / 2) * (1 - this.y / CONFIG.treeHeight);
-                radius += (Math.random() - 0.5) * 15; // 随机松散度
+                radius += (Math.random() - 0.5) * 15; 
                 
                 let angle = Math.random() * Math.PI * 2;
                 
                 this.x = Math.cos(angle) * radius;
                 this.z = Math.sin(angle) * radius;
                 
-                this.size = Math.random() * 2 + 0.5;
+                this.size = Math.random() * 2.5 + 0.5; 
                 this.color = this.colorPalette[Math.floor(Math.random() * this.colorPalette.length)];
                 this.alpha = Math.random() * 0.5 + 0.5;
                 this.sparkleSpeed = Math.random() * 0.05 + 0.01;
@@ -118,22 +156,19 @@
             }
 
             update(angleOffset) {
-                // 闪烁
                 this.phase += this.sparkleSpeed;
                 this.currentAlpha = this.alpha * (0.6 + 0.4 * Math.sin(this.phase));
 
-                // 旋转
                 let cos = Math.cos(angleOffset);
                 let sin = Math.sin(angleOffset);
                 
                 let rx = this.x * cos - this.z * sin;
                 let rz = this.x * sin + this.z * cos;
 
-                // 投影
                 let scale = CONFIG.perspective / (CONFIG.perspective + rz + 400); 
                 
                 this.projX = this.treeX + rx * scale;
-                this.projY = (this.treeY - this.y) * scale + (height * 0.1); 
+                this.projY = (this.treeY - this.y) * scale + (height * 0.15); 
                 this.projSize = this.size * scale;
                 this.projScale = scale; 
             }
@@ -145,94 +180,131 @@
                 ctx.arc(this.projX, this.projY, this.projSize, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // 地面树影 (稍微加强一点)
-                ctx.globalAlpha = this.currentAlpha * 0.2;
-                let reflectY = this.treeY + (this.treeY - this.projY) * 0.6 + 20; 
+                // 地面倒影
+                ctx.globalAlpha = this.currentAlpha * 0.15;
+                let baseGroundY = this.treeY + (height * 0.15); 
+                let distFromBase = baseGroundY - this.projY;
+                let reflectY = baseGroundY + distFromBase * 0.8; 
+                
                 ctx.beginPath();
-                ctx.arc(this.projX, reflectY, this.projSize * 2, 0, Math.PI * 2);
+                ctx.arc(this.projX, reflectY, this.projSize * 2.5, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
 
-        // 装饰物类
-        class Topper {
-            constructor(type, x, y, size, color) {
-                this.type = type; // 'moon' or 'heart'
+        // 月亮类
+        class MoonTopper {
+            constructor(x, y, size, color) {
                 this.x = x;
                 this.y = y;
+                this.baseY = y; 
                 this.size = size;
                 this.color = color;
+                this.floatOffset = 0;
             }
 
-            draw() {
+            draw(angle) {
+                // 上下浮动动画
+                this.floatOffset += 0.03;
+                let currentY = this.y + Math.sin(this.floatOffset) * 3;
+
                 ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.shadowBlur = 25;
+                
+                // 1. 移动到月亮中心位置
+                ctx.translate(this.x, currentY);
+                
+                // 2. 模拟 3D 旋转 (绕 Y 轴)
+                // 使用 cosine 函数来计算水平缩放，这会模拟平面月亮随着树旋转的效果
+                let scaleX = Math.cos(angle);
+                ctx.scale(scaleX, 1);
+                
+                // 长亮设置
+                ctx.shadowBlur = 40; // 增强光晕
                 ctx.shadowColor = this.color;
                 ctx.fillStyle = this.color;
+                ctx.globalAlpha = 1; // 保持不透明
 
-                if (this.type === 'moon') {
-                    // 月亮
-                    ctx.beginPath();
-                    ctx.arc(-6, 0, this.size, 0, Math.PI * 2); 
-                    ctx.globalCompositeOperation = 'destination-out';
-                    ctx.arc(4, -4, this.size * 0.9, 0, Math.PI * 2); 
-                    ctx.globalCompositeOperation = 'source-over';
-                    ctx.fill();
-                    // 勾勒轮廓增强亮度
-                    ctx.shadowBlur = 10;
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                } else if (this.type === 'heart') {
-                    // 爱心
-                    let s = this.size / 30; 
-                    ctx.beginPath();
-                    ctx.moveTo(0, -10 * s);
-                    ctx.bezierCurveTo(0, -13 * s, -5 * s, -25 * s, -25 * s, -25 * s);
-                    ctx.bezierCurveTo(-55 * s, -25 * s, -55 * s, 10 * s, -55 * s, 10 * s);
-                    ctx.bezierCurveTo(-55 * s, 30 * s, 0, 60 * s, 0, 60 * s);
-                    ctx.bezierCurveTo(0, 60 * s, 55 * s, 30 * s, 55 * s, 10 * s);
-                    ctx.bezierCurveTo(55 * s, 10 * s, 55 * s, -25 * s, 25 * s, -25 * s);
-                    ctx.bezierCurveTo(5 * s, -25 * s, 0, -13 * s, 0, -10 * s);
-                    ctx.fill();
-                }
+                // --- 绘制月亮形状 (标准的 C 型月牙) ---
+                
+                // 1. 绘制主体圆 (底色)
+                ctx.beginPath();
+                ctx.arc(0, 0, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 2. 切换到“擦除”模式 (Destination-Out)
+                ctx.globalCompositeOperation = 'destination-out';
+                
+                // 3. 绘制遮罩圆 (挖空部分)
+                // 向右偏移 (size * 0.4) 以形成左侧月牙
+                ctx.beginPath();
+                ctx.arc(this.size * 0.4, 0, this.size * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 4. 恢复默认混合模式
+                ctx.globalCompositeOperation = 'source-over';
+                
+                // 5. 补充高亮边缘 (因为挖空后边缘可能没有光晕了，这里手动补一个描边)
+                // 注意：由于 scale 存在，描边也会被挤压，这正是我们想要的效果
+                ctx.shadowBlur = 15;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+                
+                // 重新描绘一个月牙路径用于描边 (模拟上述挖空后的形状)
+                // 这里简化处理，只描绘一个近似的弧线，或者直接重绘一次剪切流程做描边有点复杂
+                // 简单方案：画一个略小的月牙作为高光核心
+                
+                // 更好的边缘处理：由于 destination-out 擦除了像素，stroke 无法直接沿着“剪切线”描边
+                // 但因为我们有强烈的 shadowBlur，视觉上已经发光了，所以这里可以省略 stroke
+                // 或者，我们可以画一个很细的白色圆弧来点缀
+                
                 ctx.restore();
             }
         }
 
+        // 树类
         class Tree {
-            constructor(x, colorPalette, type) {
+            constructor(x) {
                 this.x = x;
                 this.particles = [];
+                const palette = ['#E1F5FE', '#B3E5FC', '#81D4FA', '#4FC3F7', '#FFFFFF', '#E0F2F1', '#FFF9C4'];
+                
                 for (let i = 0; i < CONFIG.particleCount; i++) {
-                    this.particles.push(new Particle(x, height * 0.8, colorPalette));
+                    this.particles.push(new Particle(x, height * 0.7, palette));
                 }
                 this.angle = 0;
                 
-                let topperColor = type === 'blue' ? '#E0F7FA' : '#F8BBD0';
-                // 计算顶部位置
-                let topY = (height * 0.8) - CONFIG.treeHeight - 30;
-                
-                this.topper = new Topper(
-                    type === 'blue' ? 'moon' : 'heart',
-                    x, 
-                    topY, 
-                    28, 
-                    topperColor
-                );
+                // 初始位置占位，实际位置在 updateAndDraw 中计算
+                this.topper = new MoonTopper(x, 0, 35, '#E0F7FA');
             }
 
             updateAndDraw() {
                 this.angle += CONFIG.rotateSpeed;
+                
+                // --- 关键修改：精准计算树尖位置 ---
+                // 使用与粒子相同的透视投影公式
+                // 树顶在 3D 空间中的坐标: x=0, z=0 (相对树心), y=CONFIG.treeHeight
+                let scaleAtCenter = CONFIG.perspective / (CONFIG.perspective + 400); // z=0 时的缩放比 (rz=0)
+                let treeBaseY = height * 0.7; // 树底在 3D 世界的 Y
+                let treeTipWorldY = CONFIG.treeHeight;
+                
+                // 计算屏幕上的 Y 坐标
+                // 公式: projY = (treeY - y) * scale + offset
+                let screenTipY = (treeBaseY - treeTipWorldY) * scaleAtCenter + (height * 0.15);
+                
+                // 将月亮位置设置在树尖上方一点点 (减去一点偏移量)
+                this.topper.x = this.x;
+                this.topper.y = screenTipY - 20; 
+                
                 this.particles.forEach(p => p.update(this.angle));
                 this.particles.sort((a, b) => a.projScale - b.projScale);
                 this.particles.forEach(p => p.draw());
-                this.topper.draw();
+                
+                // 传入当前角度，让月亮参与旋转
+                this.topper.draw(this.angle);
             }
         }
 
-        // 背景雪花
+        // 雪花
         class Snow {
             constructor() {
                 this.reset();
@@ -240,9 +312,9 @@
             reset() {
                 this.x = Math.random() * width;
                 this.y = Math.random() * -height;
-                this.speed = Math.random() * 2 + 0.5;
-                this.size = Math.random() * 2.5; // 稍微大一点
-                this.opacity = Math.random() * 0.5 + 0.3;
+                this.speed = Math.random() * 1.5 + 0.5;
+                this.size = Math.random() * 2;
+                this.opacity = Math.random() * 0.5 + 0.1;
             }
             draw() {
                 this.y += this.speed;
@@ -255,69 +327,30 @@
         }
 
         function initScene() {
-            trees = [];
-            const bluePalette = ['#E1F5FE', '#B3E5FC', '#81D4FA', '#4FC3F7', '#FFFFFF', '#E0F2F1'];
-            const pinkPalette = ['#FCE4EC', '#F8BBD0', '#F48FB1', '#F06292', '#FFFFFF', '#FFF8E1'];
-
-            let leftX = width * 0.25;
-            let rightX = width * 0.75;
-            
-            // 确保两棵树不会重叠
-            if(width < 800) {
-                 leftX = width * 0.2;
-                 rightX = width * 0.8;
-            }
-
-            trees.push(new Tree(leftX, bluePalette, 'blue'));
-            trees.push(new Tree(rightX, pinkPalette, 'pink'));
-
+            tree = new Tree(width / 2);
             snow = [];
-            for(let i=0; i<200; i++) snow.push(new Snow()); // 增加雪花数量
-        }
-
-        function drawGround() {
-            // 地面雪景层
-            let grad = ctx.createLinearGradient(0, height * 0.7, 0, height);
-            // 上部透明
-            grad.addColorStop(0, 'rgba(0,0,0,0)'); 
-            // 中部开始变白，营造积雪感
-            grad.addColorStop(0.5, 'rgba(200, 220, 255, 0.05)'); 
-            grad.addColorStop(0.8, 'rgba(220, 240, 255, 0.15)');
-            // 底部更亮一点
-            grad.addColorStop(1, 'rgba(240, 250, 255, 0.25)');
-            
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, height * 0.7, width, height * 0.3);
-            
-            // 额外的地面光斑，增加层次
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            let groundCenter = ctx.createRadialGradient(width/2, height, height*0.1, width/2, height, height*0.5);
-            groundCenter.addColorStop(0, 'rgba(255,255,255,0.1)');
-            groundCenter.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = groundCenter;
-            ctx.fillRect(0, height/2, width, height/2);
-            ctx.restore();
+            for(let i=0; i<150; i++) snow.push(new Snow());
         }
 
         function animate() {
             ctx.clearRect(0, 0, width, height);
             
-            drawGround();
+            let grad = ctx.createLinearGradient(0, height * 0.65, 0, height);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(0.4, 'rgba(20, 40, 70, 0.2)'); 
+            grad.addColorStop(1, 'rgba(10, 20, 40, 0.5)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, height * 0.65, width, height * 0.35);
 
-            // 绘制雪花
             snow.forEach(s => s.draw());
-
-            // 绘制树
-            trees.forEach(t => t.updateAndDraw());
+            
+            if (tree) tree.updateAndDraw();
 
             requestAnimationFrame(animate);
         }
 
-        // 启动
         resize();
         animate();
-
     </script>
 </body>
 </html>
