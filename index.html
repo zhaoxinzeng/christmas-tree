@@ -125,10 +125,14 @@
 </head>
 <body>
 
-    <!-- 背景音乐：使用 Google 官方公开音频库的 Jingle Bells -->
+    <!-- 背景音乐：尝试使用多个来源，浏览器会自动选择可用的 -->
     <audio id="bgm" loop>
-        <source src="https://www.ximalaya.com/sound/4698624" type="audio/ogg">
-        <!-- 如果需要替换，将上面的 src 改为您自己的 mp3 链接即可 -->
+        <!-- 来源1：Wikimedia Commons (Ogg格式，通常较稳定) -->
+        <source src="https://upload.wikimedia.org/wikipedia/commons/e/e8/Jingle_Bells.ogg" type="audio/ogg">
+        <!-- 来源2：Internet Archive (MP3格式) -->
+        <source src="https://ia800500.us.archive.org/24/items/jingle-bells-mp-3/Jingle%20Bells.mp3" type="audio/mpeg">
+        
+        <!-- 提示：如果以上在线链接都因网络原因失效，请下载一首 mp3 放在同目录下，并将 src 改为 "./文件名.mp3" -->
         您的浏览器不支持音频播放。
     </audio>
 
@@ -150,27 +154,42 @@
             if (isMusicPlaying) {
                 bgm.pause();
                 musicBtn.classList.remove('playing');
-                // 暂停时显示静音图标或保持音符但停止旋转
+                // 暂停时显示半透明
                 musicBtn.style.opacity = "0.7";
             } else {
-                bgm.play().then(() => {
-                    musicBtn.classList.add('playing');
-                    musicBtn.style.opacity = "1";
-                }).catch(e => {
-                    console.log("播放失败，可能是交互策略限制", e);
-                });
+                // 尝试播放
+                let playPromise = bgm.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(_ => {
+                        // 播放成功
+                        musicBtn.classList.add('playing');
+                        musicBtn.style.opacity = "1";
+                        isMusicPlaying = true;
+                    })
+                    .catch(error => {
+                        console.log("播放失败，可能是网络问题或浏览器限制:", error);
+                        alert("无法加载在线音乐，请检查网络连接，或建议使用本地音频文件。");
+                    });
+                }
             }
-            isMusicPlaying = !isMusicPlaying;
+            // 状态反转移到了 then 里面或者根据实际情况判断，这里简化逻辑
+            if(bgm.paused) {
+                 isMusicPlaying = false;
+            }
         });
 
         // 尝试在页面初次点击任意位置时播放（可选的用户体验优化）
         document.body.addEventListener('click', function initPlay() {
             if (!isMusicPlaying) {
-                bgm.play().then(() => {
-                    isMusicPlaying = true;
-                    musicBtn.classList.add('playing');
-                    musicBtn.style.opacity = "1";
-                }).catch(() => {});
+                let playPromise = bgm.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        isMusicPlaying = true;
+                        musicBtn.classList.add('playing');
+                        musicBtn.style.opacity = "1";
+                    }).catch(() => {});
+                }
                 // 只尝试一次，之后移除监听
                 document.body.removeEventListener('click', initPlay);
             }
