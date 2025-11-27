@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 粒子系统 - V14 线性推进版</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        #video-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            z-index: 10;
+            transform: scaleX(-1);
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #fs-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            z-index: 10;
+        }
+
+        #loading-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #333;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            z-index: 100;
+            max-width: 400px;
+        }
+
+        #log-output {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #aaa;
+            font-family: monospace;
+            text-align: left;
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+            height: 100px;
+            overflow-y: auto;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #333;
+            border-top: 4px solid #00ffff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        #gesture-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 10px #00ffff;
+            pointer-events: none;
+            text-align: right;
+        }
+
+        #gesture-hint {
+            font-size: 14px;
+            color: #aaa;
+            font-weight: normal;
+            margin-top: 5px;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+
+    <div id="loading-panel">
+        <div class="spinner"></div>
+        <h3 id="status-title">系统启动中...</h3>
+        <div id="log-output">正在加载脚本...</div>
+    </div>
+
+    <div id="gesture-status">
+        等待手势...
+        <div id="gesture-hint">请对准摄像头操作</div>
+    </div>
+
+    <div id="video-container"><video id="video" playsinline></video></div>
+    <button id="fs-btn">⛶ 全屏体验</button>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "lil-gui": "https://unpkg.com/lil-gui@0.19.1/dist/lil-gui.esm.min.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import GUI from 'lil-gui';
+
+        const logDiv = document.getElementById('log-output');
+        const loadingPanel = document.getElementById('loading-panel');
+        const gestureStatus = document.getElementById('gesture-status');
+        const gestureHint = document.getElementById('gesture-hint');
+
+        function log(msg, isError = false) {
+            const line = document.createElement('div');
+            line.textContent = `> ${msg}`;
+            if (isError) line.style.color = '#ff4444';
+            logDiv.appendChild(line);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // 1. 场景
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.015);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 40, 80);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 2;
+        controls.maxDistance = 800;
+
+        // 粒子
+        const PARTICLE_COUNT = 15000;
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+        for (let i = 0; i < PARTICLE_COUNT * 3; i++) {
+            positions[i] = (Math.random() - 0.5) * 50;
+            targetPositions[i] = positions[i];
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const material = new THREE.PointsMaterial({ size: 0.15, color: 0x00ffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // 准星
+        const cursorGroup = new THREE.Group();
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(1.0, 1.2, 32),
+            new THREE.MeshBasicMaterial({ color: 0xff3366, side: THREE.DoubleSide, transparent: true, opacity: 0.8, depthTest: false })
+        );
+        cursorGroup.add(ring);
+        const dot = new THREE.Mesh(
+            new THREE.CircleGeometry(0.2, 16),
+            new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })
+        );
+        cursorGroup.add(dot);
+        cursorGroup.rotation.x = -Math.PI / 2;
+        cursorGroup.renderOrder = 999;
+        scene.add(cursorGroup);
+
+        // 太阳系数据
+        const planetData = [
+            { name: '太阳', rad: 4.0, speed: 0, dist: 0 },
+            { name: '水星', rad: 0.5, speed: 0.083, dist: 0 },
+            { name: '金星', rad: 0.8, speed: 0.032, dist: 0 },
+            { name: '地球', rad: 0.9, speed: 0.020, dist: 0 },
+            { name: '火星', rad: 0.6, speed: 0.011, dist: 0 },
+            { name: '木星', rad: 2.5, speed: 0.0017, dist: 0 },
+            { name: '土星', rad: 2.0, speed: 0.0007, dist: 0, hasRing: true },
+            { name: '天王星', rad: 1.5, speed: 0.0002, dist: 0 },
+            { name: '海王星', rad: 1.4, speed: 0.0001, dist: 0 }
+        ];
+
+        const config = {
+            model: '爱心',
+            color: '#00ffff',
+            handControl: true,
+            orbitGap: 2.0,
+            moveSpeed: 1.0
+        };
+
+        function recalcLayout() {
+            let currentDist = 0;
+            planetData.forEach((p, i) => {
+                if (i === 0) p.dist = 0;
+                else {
+                    const prev = planetData[i - 1];
+                    currentDist += prev.rad + p.rad + config.orbitGap;
+                    p.dist = currentDist;
+                }
+            });
+        }
+        recalcLayout();
+
+        let planetAngles = new Array(planetData.length).fill(0);
+        let planetVisualCenters = planetData.map(() => new THREE.Vector3());
+        const solarSystemGroup = new THREE.Group();
+        scene.add(solarSystemGroup);
+
+        const particlePlanetIndices = new Int16Array(PARTICLE_COUNT);
+        const particleLocalOffsets = new Float32Array(PARTICLE_COUNT * 3);
+        const planetLabels = [];
+
+        function createLabel(text, position, size) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = 'Bold 24px Arial';
+            const metrics = context.measureText(text);
+            const width = metrics.width;
+            canvas.width = width + 20;
+            canvas.height = 40;
+            context.fillStyle = 'rgba(0,0,0,0.5)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = 'white';
+            context.font = 'Bold 24px Arial';
+            context.fillText(text, 10, 28);
+            const texture = new THREE.CanvasTexture(canvas);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
+            const scale = Math.max(1.5, size * 1.5);
+            sprite.scale.set(scale * 2, scale, 1);
+            sprite.center.set(0.5, 0.5);
+            sprite.position.copy(position);
+            return sprite;
+        }
+
+        function updateSolarSystemExtras(show) {
+            while (solarSystemGroup.children.length > 0) {
+                const child = solarSystemGroup.children[0];
+                solarSystemGroup.remove(child);
+                if (child.material) child.material.dispose();
+            }
+            planetLabels.length = 0;
+            if (!show) return;
+
+            planetData.forEach((p, i) => {
+                const x = Math.cos(planetAngles[i]) * p.dist;
+                const z = Math.sin(planetAngles[i]) * p.dist;
+                planetVisualCenters[i].set(x, 0, z);
+            });
+
+            planetData.forEach((p, index) => {
+                if (p.dist > 0) {
+                    const curve = new THREE.EllipseCurve(0, 0, p.dist, p.dist, 0, 2 * Math.PI, false, 0);
+                    const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(128));
+                    const orbit = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.15, transparent: true }));
+                    orbit.rotation.x = -Math.PI / 2;
+                    solarSystemGroup.add(orbit);
+                }
+                const label = createLabel(p.name, new THREE.Vector3(), p.rad);
+                solarSystemGroup.add(label);
+                planetLabels[index] = label;
+            });
+        }
+
+        const shapes = {
+            '爱心': (i) => {
+                const t = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 10;
+                const x = 16 * Math.pow(Math.sin(t), 3), y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+                return new THREE.Vector3(x * 0.5 + (Math.random() - 0.5) * 2, y * 0.5 + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 5);
+            },
+            '土星': (i) => {
+                const isRing = Math.random() > 0.4;
+                if (isRing) {
+                    const angle = Math.random() * Math.PI * 2, rad = 8 + Math.random() * 4;
+                    return new THREE.Vector3(Math.cos(angle) * rad, (Math.random() - 0.5) * 0.5, Math.sin(angle) * rad);
+                }
+                const r = 5, theta = Math.random() * Math.PI * 2, phi = Math.acos((Math.random() * 2) - 1);
+                return new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
+            },
+            '太阳系': (i) => {
+                const r = Math.random();
+                let pIndex = 0;
+                for (let k = 0; k < planetData.length; k++) {
+                    if (k === planetData.length - 1 || r < (k + 1) / planetData.length) { pIndex = k; break; }
+                }
+                const p = planetData[pIndex];
+                let localPos;
+                if (p.hasRing && Math.random() > 0.4) {
+                    const ringAngle = Math.random() * Math.PI * 2, ringRad = p.rad * 1.5 + Math.random() * p.rad;
+                    localPos = new THREE.Vector3(Math.cos(ringAngle) * ringRad, (Math.random() - 0.5) * 0.2, Math.sin(ringAngle) * ringRad);
+                } else {
+                    const theta = Math.random() * Math.PI * 2, phi = Math.acos((Math.random() * 2) - 1);
+                    localPos = new THREE.Vector3(p.rad * Math.sin(phi) * Math.cos(theta), p.rad * Math.sin(phi) * Math.sin(theta), p.rad * Math.cos(phi));
+                }
+                particlePlanetIndices[i] = pIndex;
+                particleLocalOffsets[i * 3] = localPos.x; particleLocalOffsets[i * 3 + 1] = localPos.y; particleLocalOffsets[i * 3 + 2] = localPos.z;
+                const angle = planetAngles[pIndex];
+                return new THREE.Vector3(Math.cos(angle) * p.dist + localPos.x, localPos.y, Math.sin(angle) * p.dist + localPos.z);
+            }
+        };
+
+        function refreshSystem() {
+            recalcLayout();
+            if (config.model === '太阳系') {
+                updateSolarSystemExtras(true);
+                morphTo('太阳系');
+            } else {
+                morphTo(config.model);
+            }
+        }
+
+        function morphTo(name) {
+            if (name !== '太阳系') updateSolarSystemExtras(false);
+            const generator = shapes[name] || shapes['爱心'];
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const v = generator(i);
+                targetPositions[i * 3] = v.x; targetPositions[i * 3 + 1] = v.y; targetPositions[i * 3 + 2] = v.z;
+            }
+        }
+        morphTo('爱心');
+
+        const gui = new GUI({ title: '控制面板' });
+        gui.add(config, 'model', ['爱心', '土星', '太阳系']).name('选择模型').onChange((val) => {
+            if (val === '太阳系') refreshSystem();
+            else morphTo(val);
+        });
+        gui.addColor(config, 'color').onChange(c => material.color.set(c));
+        gui.add(config, 'orbitGap', 0.5, 10.0).name('轨道间距').onChange(() => { if (config.model === '太阳系') refreshSystem(); });
+        gui.add(config, 'moveSpeed', 0.1, 3.0).name('飞行速度');
+        gui.add(config, 'handControl').name('启用手势');
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+        let isHandDetected = false;
+        let handGesture = 'IDLE';
+        let smoothedHandDist = 0.2;
+        let currentVelocity = 0;
+
+        const videoElement = document.getElementById('video');
+
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        });
+
+        async function startAI() {
+            log("初始化 AI...");
+            if (!window.Hands || !window.Camera) { log("❌ 库加载失败", true); return; }
+            const hands = new window.Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 1 });
+
+            hands.onResults((results) => {
+                if (loadingPanel.style.display !== 'none') { loadingPanel.style.display = 'none'; log("✅ 系统就绪"); }
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    isHandDetected = true;
+                    const landmarks = results.multiHandLandmarks[0];
+                    const thumb = landmarks[4];
+                    const index = landmarks[8];
+
+                    const rawDist = Math.sqrt(Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2));
+                    smoothedHandDist += (rawDist - smoothedHandDist) * 0.1;
+
+                    if (smoothedHandDist > 0.25) {
+                        handGesture = 'ZOOM_IN';
+                        gestureStatus.innerText = '🖐️ 线性推进';
+                        gestureStatus.style.color = '#00ff00';
+                        gestureHint.innerText = '正在向前飞行...';
+                    } else if (smoothedHandDist < 0.08) {
+                        handGesture = 'ZOOM_OUT';
+                        gestureStatus.innerText = '👌 线性后撤';
+                        gestureStatus.style.color = '#ffcc00';
+                        gestureHint.innerText = '正在向后拉远...';
+                    } else {
+                        handGesture = 'IDLE';
+                        gestureStatus.innerText = '✋ 悬停';
+                        gestureStatus.style.color = '#ffffff';
+                        gestureHint.innerText = '保持手势稳定';
+                    }
+                } else {
+                    isHandDetected = false;
+                    handGesture = 'IDLE';
+                    gestureStatus.innerText = '等待手势...';
+                    gestureStatus.style.color = '#aaaaaa';
+                    gestureHint.innerText = '请举起手对准摄像头';
+                    smoothedHandDist = 0.15;
+                }
+            });
+
+            const cameraUtils = new window.Camera(videoElement, { onFrame: async () => { await hands.send({ image: videoElement }); }, width: 320, height: 240 });
+            await cameraUtils.start();
+        }
+        startAI();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (config.model === '太阳系') {
+                const trueCenters = [];
+                for (let k = 0; k < planetData.length; k++) {
+                    const p = planetData[k];
+                    if (p.dist > 0) planetAngles[k] += p.speed;
+                    trueCenters[k] = { x: Math.cos(planetAngles[k]) * p.dist, z: Math.sin(planetAngles[k]) * p.dist };
+                }
+                for (let k = 0; k < planetData.length; k++) {
+                    const visual = planetVisualCenters[k];
+                    const truePos = trueCenters[k];
+                    visual.x += (truePos.x - visual.x) * 0.05;
+                    visual.z += (truePos.z - visual.z) * 0.05;
+                    if (planetLabels[k]) planetLabels[k].position.set(visual.x, 0, visual.z);
+                }
+                for (let i = 0; i < PARTICLE_COUNT; i++) {
+                    const pIndex = particlePlanetIndices[i];
+                    const p = planetData[pIndex];
+                    const angle = planetAngles[pIndex];
+                    targetPositions[i * 3] = Math.cos(angle) * p.dist + particleLocalOffsets[i * 3];
+                    targetPositions[i * 3 + 1] = particleLocalOffsets[i * 3 + 1];
+                    targetPositions[i * 3 + 2] = Math.sin(angle) * p.dist + particleLocalOffsets[i * 3 + 2];
+                }
+                particles.rotation.y = 0;
+            } else {
+                particles.rotation.y += 0.002;
+            }
+
+            const pos = particles.geometry.attributes.position.array;
+            for (let i = 0; i < PARTICLE_COUNT * 3; i++) {
+                pos[i] += (targetPositions[i] - pos[i]) * 0.05;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+
+
+            // --- 相机逻辑 (V14 修正：去旋转) ---
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(groundPlane, intersectPoint);
+
+            if (intersectPoint) {
+                cursorGroup.position.copy(intersectPoint);
+                const distToCam = camera.position.distanceTo(intersectPoint);
+                cursorGroup.scale.setScalar(distToCam * 0.02);
+                // 移除：currentLookTarget.lerp(intersectPoint, 0.05);
+                // 我们不再强制让镜头扭向目标，以避免晕厥
+            }
+
+            if (config.handControl && isHandDetected && intersectPoint) {
+                // 计算目标速度
+                let targetVelocity = 0;
+
+                if (handGesture === 'ZOOM_IN') {
+                    if (camera.position.distanceTo(intersectPoint) > 5) {
+                        targetVelocity = config.moveSpeed;
+                    }
+                }
+                else if (handGesture === 'ZOOM_OUT') {
+                    targetVelocity = -config.moveSpeed;
+                }
+
+                // 惯性平滑
+                currentVelocity += (targetVelocity - currentVelocity) * 0.05;
+
+                // 应用移动 (核心修正点)
+                if (Math.abs(currentVelocity) > 0.01) {
+                    // 1. 计算从相机指向鼠标点的方向向量
+                    const direction = new THREE.Vector3().subVectors(intersectPoint, camera.position).normalize();
+
+                    // 2. 计算位移量
+                    const moveVector = direction.multiplyScalar(currentVelocity);
+
+                    // 3. 同时移动相机 AND 观察目标 (OrbitControls.target)
+                    // 这样相机的观察角度（Rotation）就不会变！
+                    camera.position.add(moveVector);
+                    controls.target.add(moveVector);
+                }
+            } else {
+                currentVelocity *= 0.9;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        document.getElementById('fs-btn').addEventListener('click', () => {
+            document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+        });
+    </script>
+</body>
+
+</html>
